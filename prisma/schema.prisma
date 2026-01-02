@@ -1,0 +1,90 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(uuid())
+  telegramId   BigInt   @unique @map("telegram_id")
+  firstName    String?  @map("first_name")
+  lastName     String?  @map("last_name")
+  username     String?
+  photoUrl     String?  @map("photo_url")
+  isVerified   Boolean  @default(false) @map("is_verified")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  places       Place[]
+  reviews      Review[]
+  favorites    Favorite[]
+
+  @@map("users")
+}
+
+model Place {
+  id           String   @id @default(uuid())
+  name         String
+  category     String
+  categoryIcon String?  @map("category_icon")
+  address      String
+  city         String
+  description  String?
+  image        String?
+  latitude     Float
+  longitude    Float
+  ownerId      String   @map("owner_id")
+  isOpen       Boolean  @default(true) @map("is_open")
+  
+  owner        User     @relation(fields: [ownerId], references: [id])
+  reviews      Review[]
+  favorites    Favorite[]
+
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@map("places")
+}
+
+model Review {
+  id           String   @id @default(uuid())
+  text         String
+  rating       Int
+  likes        Int      @default(0)
+  dislikes     Int      @default(0)
+  userId       String   @map("user_id")
+  placeId      String   @map("place_id")
+  ownerResponse String? @map("owner_response")
+  
+  user         User     @relation(fields: [userId], references: [id])
+  place        Place    @relation(fields: [placeId], references: [id])
+  
+  images       ReviewImage[]
+
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@map("reviews")
+}
+
+model ReviewImage {
+  id       String @id @default(uuid())
+  url      String
+  reviewId String @map("review_id")
+  review   Review @relation(fields: [reviewId], references: [id])
+
+  @@map("review_images")
+}
+
+model Favorite {
+  userId  String @map("user_id")
+  placeId String @map("place_id")
+
+  user    User   @relation(fields: [userId], references: [id])
+  place   Place  @relation(fields: [placeId], references: [id])
+
+  @@id([userId, placeId])
+  @@map("favorites")
+}
