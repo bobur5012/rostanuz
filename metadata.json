@@ -1,0 +1,5 @@
+{
+  "name": "Rostan",
+  "description": "A Telegram-first reviews application where users can find places, leave honest reviews, and manage content.",
+  "requestFramePermissions": []
+}
