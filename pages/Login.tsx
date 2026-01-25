@@ -10,55 +10,29 @@ const Login: React.FC<LoginProps> = ({ onLogin, onBack }) => {
     const telegramWrapperRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
-        /**
-         * 1️⃣ СНАЧАЛА объявляем callback
-         * Telegram может вызвать его сразу после загрузки скрипта
-         */
-        (window as any).onTelegramAuth = async (user: any) => {
-            console.log('Telegram Auth Data:', user);
-
-            try {
-                const res = await fetch(`${API_URL}/auth/telegram`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify(user),
-                });
-
-                if (!res.ok) {
-                    const errorData = await res.json().catch(() => ({ error: 'Unknown error' }));
-                    console.error('Backend auth failed - HTTP error:', res.status, errorData);
-                    alert(`Ошибка авторизации: ${errorData.error || 'Неизвестная ошибка'}`);
-                    return;
+        // Проверяем, есть ли успешная авторизация (после редиректа от backend)
+        const urlParams = new URLSearchParams(window.location.search);
+        const authSuccess = urlParams.get('auth_success');
+        
+        // Если есть параметр auth_success, значит backend уже сохранил данные в localStorage
+        if (authSuccess === 'true') {
+            const storedUser = localStorage.getItem('rostan_user');
+            if (storedUser) {
+                try {
+                    const user = JSON.parse(storedUser);
+                    console.log('User data loaded from localStorage:', user);
+                    onLogin(user);
+                    // Очищаем URL от параметров
+                    window.history.replaceState({}, document.title, window.location.pathname);
+                } catch (error) {
+                    console.error('Error parsing user data:', error);
                 }
-
-                const data = await res.json();
-                console.log('Backend auth response:', data);
-
-                if (data.status !== 'ok' || !data.user) {
-                    console.error('Backend auth failed - invalid response:', data);
-                    alert('Ошибка авторизации: неверный ответ от сервера');
-                    return;
-                }
-
-                if (!data.user.id) {
-                    console.error('Backend auth failed - missing user.id:', data.user);
-                    alert('Ошибка авторизации: не получен ID пользователя');
-                    return;
-                }
-
-                // ✅ УСПЕШНЫЙ ЛОГИН
-                console.log('Calling onLogin with user:', data.user);
-                onLogin(data.user);
-            } catch (error) {
-                console.error('Auth request error:', error);
-                alert('Ошибка соединения с сервером. Проверьте, что бэкенд запущен.');
             }
-        };
+        }
 
         /**
-         * 2️⃣ Потом вставляем Telegram Login Widget
+         * Вставляем Telegram Login Widget с data-auth-url
+         * Telegram сам сделает редирект на backend после клика
          */
         if (
             telegramWrapperRef.current &&
@@ -68,22 +42,14 @@ const Login: React.FC<LoginProps> = ({ onLogin, onBack }) => {
             script.src = 'https://telegram.org/js/telegram-widget.js?22';
             script.async = true;
 
-            script.setAttribute('data-telegram-login', 'uslugiuz_bot'); // без @
+            // BOT_USERNAME без @
+            script.setAttribute('data-telegram-login', 'uslugiuz_bot');
             script.setAttribute('data-size', 'large');
-            script.setAttribute('data-radius', '16');
+            script.setAttribute('data-auth-url', `${API_URL}/auth/telegram`);
             script.setAttribute('data-request-access', 'write');
-            script.setAttribute('data-userpic', 'false');
-            script.setAttribute('data-onauth', 'onTelegramAuth');
 
             telegramWrapperRef.current.appendChild(script);
         }
-
-        /**
-         * 3️⃣ Cleanup (на всякий случай)
-         */
-        return () => {
-            delete (window as any).onTelegramAuth;
-        };
     }, [onLogin]);
 
     return (

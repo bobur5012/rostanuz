@@ -26,16 +26,19 @@
     npm install
     ```
 
-3.  **Файл `.env` уже создан** со следующим содержимым:
+3.  **Создайте файл `.env`** в папке `backend` со следующим содержимым:
     
     ```env
     PORT=3001
-    BOT_TOKEN=8392374449:AAGLe9PU5btozMgvVLjr07PA1cwKfaUu_Lk
+    BOT_TOKEN=ваш_токен_от_BotFather
     DATABASE_URL=postgres://postgres:password@localhost:5432/rostan_db
     YANDEX_MAPS_API_KEY=34326806-895d-4878-96c6-da6d65c3482d
+    FRONTEND_URL=http://localhost:3000
     ```
 
     **Важно:** 
+    *   `BOT_TOKEN` - обязателен! Получите его у [@BotFather](https://t.me/botfather) командой `/newbot`
+    *   `FRONTEND_URL` - URL вашего фронтенда (для локальной разработки `http://localhost:3000`, для продакшена - ваш домен на Netlify)
     *   Если у вашего пользователя `postgres` другой пароль (не `password`), замените его в строке `DATABASE_URL`.
     *   Формат: `postgres://имя_пользователя:пароль@localhost:5432/имя_базы`
     *   `YANDEX_MAPS_API_KEY` используется для работы карт.
@@ -56,27 +59,38 @@ npm start
 
 ---
 
-## Шаг 4: Подключение Фронтенда
+## Шаг 4: Настройка Telegram Bot
 
-Фронтенд уже настроен на работу с этим сервером в файле `pages/Login.tsx`.
+**ОБЯЗАТЕЛЬНО для работы авторизации:**
 
-1.  Откройте `pages/Login.tsx`.
-2.  Найдите закомментированный блок `fetch` внутри функции `(window as any).onTelegramAuth`.
-3.  Раскомментируйте его, чтобы при входе данные отправлялись на `http://localhost:3001/auth/telegram`.
+1.  Создайте бота через [@BotFather](https://t.me/botfather):
+    - Отправьте `/newbot`
+    - Следуйте инструкциям
+    - Скопируйте токен и добавьте в `.env` как `BOT_TOKEN`
 
-Пример раскомментированного кода в `Login.tsx`:
+2.  Настройте домен для виджета авторизации:
+    - Отправьте `/setdomain` в [@BotFather](https://t.me/botfather)
+    - Выберите вашего бота
+    - Для локальной разработки: `localhost:3000`
+    - Для продакшена: ваш домен на Netlify (например, `rostanuz.netlify.app`)
 
-```typescript
-fetch('http://localhost:3001/auth/telegram', {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify(user)
-})
-.then(res => res.json())
-.then(data => {
-    if(data.status === 'ok') {
-        // Логин успешен, сохраняем пользователя
-        onLogin(data.user);
-    }
-});
-```
+**Важно:** Без настройки домена через BotFather виджет авторизации не будет работать!
+
+---
+
+## Шаг 5: Проверка работы
+
+1.  Запустите бэкенд: `npm start`
+2.  Проверьте в консоли: должно быть `BOT_TOKEN exists: true`
+3.  Если `false` - проверьте файл `.env` и переменную `BOT_TOKEN`
+
+---
+
+## Как работает авторизация
+
+1.  Пользователь нажимает кнопку Telegram на фронтенде
+2.  Telegram делает редирект на `BACKEND_URL/auth/telegram` с данными в query параметрах
+3.  Backend проверяет подпись (HMAC) и `auth_date` (не старше 24 часов)
+4.  Backend создает/обновляет пользователя в базе данных
+5.  Backend возвращает HTML страницу, которая сохраняет данные в localStorage и редиректит на фронтенд
+6.  Фронтенд автоматически логинит пользователя
