@@ -8,6 +8,7 @@ interface LoginProps {
 
 const Login: React.FC<LoginProps> = ({ onLogin, onBack }) => {
     const telegramWrapperRef = useRef<HTMLDivElement>(null);
+    const [showDomainError, setShowDomainError] = React.useState(false);
 
     useEffect(() => {
         // Проверяем, есть ли успешная авторизация (после редиректа от backend)
@@ -84,6 +85,19 @@ const Login: React.FC<LoginProps> = ({ onLogin, onBack }) => {
             script.setAttribute('data-request-access', 'write');
             script.setAttribute('data-onauth', 'onTelegramAuth');
 
+            script.onerror = () => {
+                console.error('Failed to load Telegram widget script');
+                setShowDomainError(true);
+            };
+
+            // Проверяем через некоторое время, загрузился ли виджет
+            setTimeout(() => {
+                if (telegramWrapperRef.current && telegramWrapperRef.current.children.length === 0) {
+                    console.warn('Telegram widget did not load - domain might not be configured');
+                    setShowDomainError(true);
+                }
+            }, 2000);
+
             telegramWrapperRef.current.appendChild(script);
         }
 
@@ -129,6 +143,21 @@ const Login: React.FC<LoginProps> = ({ onLogin, onBack }) => {
                     ref={telegramWrapperRef}
                     className="min-h-[50px] flex items-center justify-center"
                 />
+
+                {/* Сообщение об ошибке домена */}
+                {showDomainError && (
+                    <div className="mt-4 p-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg text-sm text-yellow-800 dark:text-yellow-200">
+                        <p className="font-semibold mb-2">⚠️ Домен не настроен в BotFather</p>
+                        <p className="mb-2">Чтобы исправить:</p>
+                        <ol className="list-decimal list-inside space-y-1 text-xs">
+                            <li>Откройте <a href="https://t.me/botfather" target="_blank" rel="noopener noreferrer" className="underline">@BotFather</a> в Telegram</li>
+                            <li>Отправьте команду <code className="bg-yellow-100 dark:bg-yellow-900 px-1 rounded">/setdomain</code></li>
+                            <li>Выберите бота <code className="bg-yellow-100 dark:bg-yellow-900 px-1 rounded">uslugiuz_bot</code></li>
+                            <li>Введите домен: <code className="bg-yellow-100 dark:bg-yellow-900 px-1 rounded">{window.location.hostname}</code></li>
+                        </ol>
+                        <p className="mt-2 text-xs">После настройки перезагрузите страницу.</p>
+                    </div>
+                )}
 
                 <p className="text-xs text-slate-400 dark:text-slate-500 mt-6 max-w-[220px]">
                     Нажимая кнопку, вы принимаете{' '}
