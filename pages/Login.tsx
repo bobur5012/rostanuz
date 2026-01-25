@@ -30,23 +30,50 @@ const Login: React.FC<LoginProps> = ({ onLogin, onBack }) => {
             }
         }
 
-        // Определяем, используем ли мы локальную разработку или продакшен
-        const isLocalhost = window.location.hostname === 'localhost' || 
-                           window.location.hostname === '127.0.0.1' || 
-                           window.location.hostname === '';
-        const isProduction = API_URL.startsWith('https://') && !isLocalhost;
-        
-        console.log('Auth mode:', { isLocalhost, isProduction, API_URL, hostname: window.location.hostname });
-
         /**
          * Вставляем Telegram Login Widget
-         * Для локальной разработки используем onAuth callback
-         * Для продакшена используем data-auth-url
+         * ВСЕГДА используем onAuth callback - это самый надежный способ
+         * data-auth-url может работать неправильно с полными URL
          */
         if (
             telegramWrapperRef.current &&
             !telegramWrapperRef.current.hasChildNodes()
         ) {
+            // Объявляем callback ДО создания скрипта
+            (window as any).onTelegramAuth = async (user: any) => {
+                console.log('Telegram Auth Data (callback):', user);
+
+                try {
+                    // Отправляем данные на backend для проверки
+                    const res = await fetch(`${API_URL}/auth/telegram`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify(user),
+                    });
+
+                    if (!res.ok) {
+                        const errorData = await res.json().catch(() => ({ error: 'Unknown error' }));
+                        console.error('Backend auth failed:', res.status, errorData);
+                        alert(`Ошибка авторизации: ${errorData.error || 'Неизвестная ошибка'}`);
+                        return;
+                    }
+
+                    const data = await res.json();
+                    console.log('Backend auth response:', data);
+
+                    if (data.status === 'ok' && data.user) {
+                        onLogin(data.user);
+                    } else {
+                        alert('Ошибка авторизации: ' + (data.error || 'Неверный ответ от сервера'));
+                    }
+                } catch (error) {
+                    console.error('Auth request error:', error);
+                    alert('Ошибка соединения с сервером. Проверьте, что бэкенд запущен.');
+                }
+            };
+
             const script = document.createElement('script');
             script.src = 'https://telegram.org/js/telegram-widget.js?22';
             script.async = true;
@@ -55,61 +82,14 @@ const Login: React.FC<LoginProps> = ({ onLogin, onBack }) => {
             script.setAttribute('data-telegram-login', 'uslugiuz_bot');
             script.setAttribute('data-size', 'large');
             script.setAttribute('data-request-access', 'write');
-
-            if (isLocalhost || !isProduction) {
-                // Локальная разработка: используем onAuth callback
-                console.log('Using onAuth callback for local development');
-                
-                // Объявляем callback ДО создания скрипта
-                (window as any).onTelegramAuth = async (user: any) => {
-                    console.log('Telegram Auth Data (callback):', user);
-
-                    try {
-                        // Отправляем данные на backend для проверки
-                        const res = await fetch(`${API_URL}/auth/telegram`, {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
-                            },
-                            body: JSON.stringify(user),
-                        });
-
-                        if (!res.ok) {
-                            const errorData = await res.json().catch(() => ({ error: 'Unknown error' }));
-                            console.error('Backend auth failed:', res.status, errorData);
-                            alert(`Ошибка авторизации: ${errorData.error || 'Неизвестная ошибка'}`);
-                            return;
-                        }
-
-                        const data = await res.json();
-                        console.log('Backend auth response:', data);
-
-                        if (data.status === 'ok' && data.user) {
-                            onLogin(data.user);
-                        } else {
-                            alert('Ошибка авторизации: ' + (data.error || 'Неверный ответ от сервера'));
-                        }
-                    } catch (error) {
-                        console.error('Auth request error:', error);
-                        alert('Ошибка соединения с сервером');
-                    }
-                };
-
-                script.setAttribute('data-onauth', 'onTelegramAuth');
-            } else {
-                // Продакшен: используем data-auth-url
-                console.log('Using data-auth-url for production');
-                script.setAttribute('data-auth-url', `${API_URL}/auth/telegram`);
-            }
+            script.setAttribute('data-onauth', 'onTelegramAuth');
 
             telegramWrapperRef.current.appendChild(script);
         }
 
         // Cleanup
         return () => {
-            if (isLocalhost || !isProduction) {
-                delete (window as any).onTelegramAuth;
-            }
+            delete (window as any).onTelegramAuth;
         };
     }, [onLogin]);
 
