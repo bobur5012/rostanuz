@@ -41,10 +41,20 @@ const Login: React.FC<LoginProps> = ({ onLogin, onBack }) => {
             !telegramWrapperRef.current.hasChildNodes()
         ) {
             // Объявляем callback ДО создания скрипта
+            // Важно: функция должна быть в глобальной области видимости
             (window as any).onTelegramAuth = async (user: any) => {
-                console.log('Telegram Auth Data (callback):', user);
+                console.log('🔵 onTelegramAuth CALLED!', user);
+                console.log('🔵 API_URL:', API_URL);
+                console.log('🔵 Full URL:', `${API_URL}/auth/telegram`);
+
+                if (!user || !user.hash) {
+                    console.error('❌ Invalid user data:', user);
+                    alert('Ошибка: не получены данные от Telegram');
+                    return;
+                }
 
                 try {
+                    console.log('🔵 Sending request to backend...');
                     // Отправляем данные на backend для проверки
                     const res = await fetch(`${API_URL}/auth/telegram`, {
                         method: 'POST',
@@ -54,26 +64,35 @@ const Login: React.FC<LoginProps> = ({ onLogin, onBack }) => {
                         body: JSON.stringify(user),
                     });
 
+                    console.log('🔵 Backend response status:', res.status);
+                    console.log('🔵 Backend response ok:', res.ok);
+
                     if (!res.ok) {
                         const errorData = await res.json().catch(() => ({ error: 'Unknown error' }));
-                        console.error('Backend auth failed:', res.status, errorData);
+                        console.error('❌ Backend auth failed:', res.status, errorData);
                         alert(`Ошибка авторизации: ${errorData.error || 'Неизвестная ошибка'}`);
                         return;
                     }
 
                     const data = await res.json();
-                    console.log('Backend auth response:', data);
+                    console.log('✅ Backend auth response:', data);
 
                     if (data.status === 'ok' && data.user) {
+                        console.log('✅ Login successful, calling onLogin');
                         onLogin(data.user);
                     } else {
+                        console.error('❌ Invalid response:', data);
                         alert('Ошибка авторизации: ' + (data.error || 'Неверный ответ от сервера'));
                     }
                 } catch (error) {
-                    console.error('Auth request error:', error);
-                    alert('Ошибка соединения с сервером. Проверьте, что бэкенд запущен.');
+                    console.error('❌ Auth request error:', error);
+                    console.error('❌ Error details:', error);
+                    alert(`Ошибка соединения с сервером: ${error instanceof Error ? error.message : 'Неизвестная ошибка'}\n\nПроверьте:\n1. Бэкенд запущен на ${API_URL}\n2. CORS настроен правильно`);
                 }
             };
+
+            // Проверяем, что callback установлен
+            console.log('🔵 onTelegramAuth callback registered:', typeof (window as any).onTelegramAuth);
 
             const script = document.createElement('script');
             script.src = 'https://telegram.org/js/telegram-widget.js?22';
@@ -85,18 +104,33 @@ const Login: React.FC<LoginProps> = ({ onLogin, onBack }) => {
             script.setAttribute('data-request-access', 'write');
             script.setAttribute('data-onauth', 'onTelegramAuth');
 
+            script.onload = () => {
+                console.log('✅ Telegram widget script loaded');
+                // Проверяем, что callback доступен
+                if (typeof (window as any).onTelegramAuth === 'function') {
+                    console.log('✅ onTelegramAuth callback is available');
+                } else {
+                    console.error('❌ onTelegramAuth callback is NOT available!');
+                }
+            };
+
             script.onerror = () => {
-                console.error('Failed to load Telegram widget script');
+                console.error('❌ Failed to load Telegram widget script');
                 setShowDomainError(true);
             };
 
             // Проверяем через некоторое время, загрузился ли виджет
             setTimeout(() => {
                 if (telegramWrapperRef.current && telegramWrapperRef.current.children.length === 0) {
-                    console.warn('Telegram widget did not load - domain might not be configured');
+                    console.warn('⚠️ Telegram widget did not load - domain might not be configured');
                     setShowDomainError(true);
                 }
             }, 2000);
+
+            // Перехватываем клики по кнопке виджета
+            telegramWrapperRef.current.addEventListener('click', (e: any) => {
+                console.log('🔵 Widget button clicked', e);
+            }, true);
 
             telegramWrapperRef.current.appendChild(script);
         }
