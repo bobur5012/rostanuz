@@ -31,6 +31,45 @@ const Login: React.FC<LoginProps> = ({ onLogin, onBack }) => {
             }
         }
 
+        // Перехватываем fetch запросы к Telegram API для получения данных пользователя
+        const originalFetch = window.fetch;
+        window.fetch = async (...args) => {
+            const response = await originalFetch(...args);
+            
+            // Проверяем, это ли запрос к Telegram API
+            const url = args[0] as string;
+            if (url && typeof url === 'string' && url.includes('telegram.org') && url.includes('get?bot_id=')) {
+                console.log('🔵 Intercepted Telegram API request:', url);
+                
+                // Клонируем response чтобы можно было прочитать его дважды
+                const clonedResponse = response.clone();
+                
+                try {
+                    const data = await clonedResponse.json();
+                    console.log('🔵 Telegram API response:', data);
+                    
+                    // Если есть данные пользователя, обрабатываем их
+                    if (data.user && data.user.hash) {
+                        console.log('🔵 Found user data in response, processing...');
+                        
+                        // Вызываем обработку вручную
+                        setTimeout(() => {
+                            if (typeof (window as any).onTelegramAuth === 'function') {
+                                console.log('🔵 Manually calling onTelegramAuth with user data');
+                                (window as any).onTelegramAuth(data.user);
+                            } else {
+                                console.error('❌ onTelegramAuth callback not available');
+                            }
+                        }, 100);
+                    }
+                } catch (error) {
+                    console.error('❌ Error parsing Telegram API response:', error);
+                }
+            }
+            
+            return response;
+        };
+
         /**
          * Вставляем Telegram Login Widget
          * ВСЕГДА используем onAuth callback - это самый надежный способ
@@ -127,17 +166,21 @@ const Login: React.FC<LoginProps> = ({ onLogin, onBack }) => {
                 }
             }, 2000);
 
-            // Перехватываем клики по кнопке виджета
-            telegramWrapperRef.current.addEventListener('click', (e: any) => {
-                console.log('🔵 Widget button clicked', e);
-            }, true);
-
             telegramWrapperRef.current.appendChild(script);
         }
 
         // Cleanup
         return () => {
             delete (window as any).onTelegramAuth;
+            // Восстанавливаем оригинальный fetch
+            window.fetch = originalFetch;
+        };
+
+        // Cleanup
+        return () => {
+            delete (window as any).onTelegramAuth;
+            // Восстанавливаем оригинальный fetch если он был перехвачен
+            // (но это не нужно, так как перехват делается внутри условия)
         };
     }, [onLogin]);
 
