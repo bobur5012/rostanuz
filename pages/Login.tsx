@@ -21,118 +21,25 @@ const Login: React.FC<LoginProps> = ({ onLogin, onBack }) => {
             if (storedUser) {
                 try {
                     const user = JSON.parse(storedUser);
-                    console.log('User data loaded from localStorage:', user);
+                    console.log('✅ User data loaded from localStorage:', user);
                     onLogin(user);
                     // Очищаем URL от параметров
                     window.history.replaceState({}, document.title, window.location.pathname);
                 } catch (error) {
-                    console.error('Error parsing user data:', error);
+                    console.error('❌ Error parsing user data:', error);
                 }
             }
         }
 
-        // Перехватываем fetch запросы к Telegram API для получения данных пользователя
-        const originalFetch = window.fetch;
-        window.fetch = async (...args) => {
-            const response = await originalFetch(...args);
-            
-            // Проверяем, это ли запрос к Telegram API
-            const url = args[0] as string;
-            if (url && typeof url === 'string' && url.includes('telegram.org') && url.includes('get?bot_id=')) {
-                console.log('🔵 Intercepted Telegram API request:', url);
-                
-                // Клонируем response чтобы можно было прочитать его дважды
-                const clonedResponse = response.clone();
-                
-                try {
-                    const data = await clonedResponse.json();
-                    console.log('🔵 Telegram API response:', data);
-                    
-                    // Если есть данные пользователя, обрабатываем их
-                    if (data.user && data.user.hash) {
-                        console.log('🔵 Found user data in response, processing...');
-                        
-                        // Вызываем обработку вручную
-                        setTimeout(() => {
-                            if (typeof (window as any).onTelegramAuth === 'function') {
-                                console.log('🔵 Manually calling onTelegramAuth with user data');
-                                (window as any).onTelegramAuth(data.user);
-                            } else {
-                                console.error('❌ onTelegramAuth callback not available');
-                            }
-                        }, 100);
-                    }
-                } catch (error) {
-                    console.error('❌ Error parsing Telegram API response:', error);
-                }
-            }
-            
-            return response;
-        };
-
         /**
-         * Вставляем Telegram Login Widget
-         * ВСЕГДА используем onAuth callback - это самый надежный способ
-         * data-auth-url может работать неправильно с полными URL
+         * Вставляем Telegram Login Widget с data-auth-url
+         * Telegram сам сделает redirect на backend после клика
+         * Backend обработает GET запрос с query параметрами (id, hash, auth_date и т.д.)
          */
         if (
             telegramWrapperRef.current &&
             !telegramWrapperRef.current.hasChildNodes()
         ) {
-            // Объявляем callback ДО создания скрипта
-            // Важно: функция должна быть в глобальной области видимости
-            (window as any).onTelegramAuth = async (user: any) => {
-                console.log('🔵 onTelegramAuth CALLED!', user);
-                console.log('🔵 API_URL:', API_URL);
-                console.log('🔵 Full URL:', `${API_URL}/auth/telegram`);
-
-                if (!user || !user.hash) {
-                    console.error('❌ Invalid user data:', user);
-                    alert('Ошибка: не получены данные от Telegram');
-                    return;
-                }
-
-                try {
-                    console.log('🔵 Sending request to backend...');
-                    // Отправляем данные на backend для проверки
-                    const res = await fetch(`${API_URL}/auth/telegram`, {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify(user),
-                    });
-
-                    console.log('🔵 Backend response status:', res.status);
-                    console.log('🔵 Backend response ok:', res.ok);
-
-                    if (!res.ok) {
-                        const errorData = await res.json().catch(() => ({ error: 'Unknown error' }));
-                        console.error('❌ Backend auth failed:', res.status, errorData);
-                        alert(`Ошибка авторизации: ${errorData.error || 'Неизвестная ошибка'}`);
-                        return;
-                    }
-
-                    const data = await res.json();
-                    console.log('✅ Backend auth response:', data);
-
-                    if (data.status === 'ok' && data.user) {
-                        console.log('✅ Login successful, calling onLogin');
-                        onLogin(data.user);
-                    } else {
-                        console.error('❌ Invalid response:', data);
-                        alert('Ошибка авторизации: ' + (data.error || 'Неверный ответ от сервера'));
-                    }
-                } catch (error) {
-                    console.error('❌ Auth request error:', error);
-                    console.error('❌ Error details:', error);
-                    alert(`Ошибка соединения с сервером: ${error instanceof Error ? error.message : 'Неизвестная ошибка'}\n\nПроверьте:\n1. Бэкенд запущен на ${API_URL}\n2. CORS настроен правильно`);
-                }
-            };
-
-            // Проверяем, что callback установлен
-            console.log('🔵 onTelegramAuth callback registered:', typeof (window as any).onTelegramAuth);
-
             const script = document.createElement('script');
             script.src = 'https://telegram.org/js/telegram-widget.js?22';
             script.async = true;
@@ -140,17 +47,13 @@ const Login: React.FC<LoginProps> = ({ onLogin, onBack }) => {
             // BOT_USERNAME без @
             script.setAttribute('data-telegram-login', 'uslugiuz_bot');
             script.setAttribute('data-size', 'large');
+            script.setAttribute('data-auth-url', `${API_URL}/auth/telegram`);
             script.setAttribute('data-request-access', 'write');
-            script.setAttribute('data-onauth', 'onTelegramAuth');
 
             script.onload = () => {
                 console.log('✅ Telegram widget script loaded');
-                // Проверяем, что callback доступен
-                if (typeof (window as any).onTelegramAuth === 'function') {
-                    console.log('✅ onTelegramAuth callback is available');
-                } else {
-                    console.error('❌ onTelegramAuth callback is NOT available!');
-                }
+                console.log('✅ Using data-auth-url mode');
+                console.log('✅ Telegram will redirect to:', `${API_URL}/auth/telegram`);
             };
 
             script.onerror = () => {
@@ -168,20 +71,6 @@ const Login: React.FC<LoginProps> = ({ onLogin, onBack }) => {
 
             telegramWrapperRef.current.appendChild(script);
         }
-
-        // Cleanup
-        return () => {
-            delete (window as any).onTelegramAuth;
-            // Восстанавливаем оригинальный fetch
-            window.fetch = originalFetch;
-        };
-
-        // Cleanup
-        return () => {
-            delete (window as any).onTelegramAuth;
-            // Восстанавливаем оригинальный fetch если он был перехвачен
-            // (но это не нужно, так как перехват делается внутри условия)
-        };
     }, [onLogin]);
 
     return (
